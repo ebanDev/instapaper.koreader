@@ -235,6 +235,108 @@ function Instapaper:parseArticleList(html)
     end
 end
 
+function Instapaper:fetchArticleContent(article_id)
+    UIManager:show(InfoMessage:new{
+        text = _("Fetching article content..."),
+        timeout = 1,
+    })
+    
+    local article_url = self.base_url .. "/read/" .. article_id
+    local response = {}
+    
+    local headers = {
+        ["Cookie"] = self.cookie or "",
+    }
+    
+    local request = {
+        url = article_url,
+        method = "GET",
+        headers = headers,
+        sink = ltn12.sink.table(response),
+    }
+    
+    local success, code = pcall(function()
+        return https.request(request)
+    end)
+    
+    if success and code == 200 then
+        local html = table.concat(response)
+        return self:parseArticleContent(html)
+    else
+        UIManager:show(InfoMessage:new{
+            text = T(_("Failed to fetch article: %1"), tostring(code)),
+        })
+        return nil
+    end
+end
+
+function Instapaper:parseArticleContent(html)
+    local content = {}
+    
+    -- Extract title from #titlebar h1
+    local titlebar_start = html:find('<[^>]*id="titlebar"')
+    if titlebar_start then
+        local titlebar_html = html:sub(titlebar_start)
+        local h1_content = titlebar_html:match('<h1[^>]*>(.-)</h1>')
+        if h1_content then
+            -- Remove HTML tags from h1 content
+            content.title = h1_content:gsub('<[^>]*>', '')
+        end
+    end
+    
+    -- Extract author from .author
+    local author = html:match('<[^>]*class="[^"]*author[^"]*"[^>]*>(.-)</[^>]*>')
+    if author then
+        content.author = author:gsub('<[^>]*>', '')
+    end
+    
+    -- Extract source from .original
+    local source = html:match('<[^>]*class="[^"]*original[^"]*"[^>]*>(.-)</[^>]*>')
+    if source then
+        content.source = source:gsub('<[^>]*>', '')
+    end
+    
+    -- Extract content from #story div
+    local story_start = html:find('<div[^>]*id="story"')
+    if story_start then
+        local story_html = html:sub(story_start)
+        -- Find matching closing div by counting nested divs
+        local div_count = 0
+        local pos = 1
+        local story_end = nil
+        
+        while pos <= #story_html do
+            local next_open = story_html:find('<div[^>]*>', pos)
+            local next_close = story_html:find('</div>', pos)
+            
+            if not next_open and not next_close then
+                break
+            end
+            
+            if next_open and (not next_close or next_open < next_close) then
+                div_count = div_count + 1
+                pos = next_open + 1
+            elseif next_close then
+                div_count = div_count - 1
+                if div_count == 0 then
+                    story_end = next_close
+                    break
+                end
+                pos = next_close + 1
+            end
+        end
+        
+        if story_end then
+            local story_content = story_html:sub(1, story_end - 1)
+            -- Remove the opening div tag
+            story_content = story_content:gsub('^<div[^>]*>', '', 1)
+            content.html = story_content
+        end
+    end
+    
+    return content
+end
+
 function Instapaper:showArticleList()
     local menu_items = {}
     
@@ -242,12 +344,37 @@ function Instapaper:showArticleList()
         table.insert(menu_items, {
             text = article.title,
             callback = function()
-                UIManager:show(InfoMessage:new{
-                    text = T(_("Article ID: %1\nDate: %2\nURL: %3"), 
-                        article.id or "N/A", 
-                        article.date or "N/A",
-                        article.href or "N/A"),
-                })
+                if article.id then
+                    local content = self:fetchArticleContent(article.id)
+                    if content then
+                        local info_text = ""
+                        if content.title then
+                            info_text = info_text .. _("Title: ") .. content.title .. "\n\n"
+                        end
+                        if content.author then
+                            info_text = info_text .. _("Author: ") .. content.author .. "\n"
+                        end
+                        if content.source then
+                            info_text = info_text .. _("Source: ") .. content.source .. "\n\n"
+                        end
+                        if content.html then
+                            -- Show first 500 characters of HTML content
+                            local preview = content.html:sub(1, 500)
+                            if #content.html > 500 then
+                                preview = preview .. "..."
+                            end
+                            info_text = info_text .. _("Content preview:\n") .. preview
+                        end
+                        
+                        UIManager:show(InfoMessage:new{
+                            text = info_text,
+                        })
+                    end
+                else
+                    UIManager:show(InfoMessage:new{
+                        text = _("No article ID available"),
+                    })
+                end
             end,
         })
     end
