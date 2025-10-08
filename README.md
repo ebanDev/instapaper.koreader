@@ -35,12 +35,38 @@ This plugin implements the Instapaper internal API:
   - Date from `<span class="date">`
   - Image URL from `.article_image <img>` (if present)
 
+## Testing
+
+See [TESTING.md](TESTING.md) for detailed instructions on how to test this plugin in the KoReader emulator.
+
+A standalone test script is also provided:
+```bash
+lua test_standalone.lua <username> <password>
+```
+
+This script tests the core plugin functionality (login, article fetching, HTML parsing) without requiring KoReader.
+
+## Recent Improvements
+
+### Bug Fixes
+- **Fixed socketutil timeout handling**: Corrected improper use of `socketutil:set_timeout()` which was incorrectly capturing return values
+- **Added timeout reset calls**: Properly reset timeouts after HTTP requests using `socketutil:reset_timeout()`
+- **Improved error handling**: Better error messages and timeout management for network operations
+
+### Testing
+- Added comprehensive testing documentation
+- Created standalone test script for validating functionality
+- Documented manual testing procedures in KoReader emulator
+
 ## Future Enhancements
 
 - Article downloading functionality
 - Offline reading support
 - Article synchronization
 - Mark articles as read
+- Persistent session storage
+- HTML entity decoding for article titles
+- More robust HTML parsing with fallback patterns
 
 ## License
 

@@ -108,14 +108,16 @@ function Instapaper:login(username, password)
         sink = ltn12.sink.table(response),
     }
     
-    local code, response_headers = socketutil:set_timeout(
-        socketutil.DEFAULT_RESPONSE_TIMEOUT,
-        socketutil.DEFAULT_RESPONSE_TIMEOUT
+    socketutil:set_timeout(
+        socketutil.DEFAULT_BLOCK_TIMEOUT,
+        socketutil.DEFAULT_TOTAL_TIMEOUT
     )
     
     local success, code, response_headers = pcall(function()
         return https.request(request)
     end)
+    
+    socketutil:reset_timeout()
     
     if success and (code == 302 or code == 303 or code == 200) then
         -- Extract cookies from response headers
@@ -159,9 +161,16 @@ function Instapaper:fetchArticleList()
         sink = ltn12.sink.table(response),
     }
     
+    socketutil:set_timeout(
+        socketutil.DEFAULT_BLOCK_TIMEOUT,
+        socketutil.DEFAULT_TOTAL_TIMEOUT
+    )
+    
     local success, code = pcall(function()
         return https.request(request)
     end)
+    
+    socketutil:reset_timeout()
     
     if success and code == 200 then
         local html = table.concat(response)
